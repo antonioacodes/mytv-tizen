@@ -1,0 +1,7 @@
+.build/
+.settings/
+.project
+.classpath
+*.wgt
+*.tpk
+*.log
