@@ -1,0 +1,43 @@
+@font-face { font-family: Outfit; src: url('../assets/fonts/Outfit-Regular.ttf') format('truetype'); font-weight: 400; }
+@font-face { font-family: Outfit; src: url('../assets/fonts/Outfit-SemiBold.ttf') format('truetype'); font-weight: 600; }
+@font-face { font-family: Outfit; src: url('../assets/fonts/Outfit-Bold.ttf') format('truetype'); font-weight: 800; }
+
+:root { --primary:#3ddeff; --hover:#66bcff; --ink:#040714; --canvas:#17171c; --surface:#121118; --surface-alt:#25272c; --text:#fafafa; --body:#b7b8bd; --muted:#6f717b; }
+* { box-sizing:border-box; }
+html, body, #app { width:100%; height:100%; margin:0; overflow:hidden; background:var(--ink); color:var(--text); font-family:Outfit,Arial,sans-serif; }
+button { font:inherit; }
+
+.splash { height:100%; display:grid; place-items:center; background:radial-gradient(circle at 56% 38%,rgba(61,222,255,.22),transparent 25%), radial-gradient(circle at 84% 60%,rgba(101,25,138,.48),transparent 30%), linear-gradient(130deg,#020613,#071729 48%,#17071f); }
+.splash::before { content:''; position:absolute; inset:0; background:linear-gradient(90deg,rgba(0,0,0,.24),transparent 55%,rgba(0,0,0,.6)); }
+.splash-content { z-index:1; display:flex; flex-direction:column; align-items:center; gap:30px; }
+.brand { letter-spacing:.18em; font-size:64px; line-height:1; font-weight:800; text-shadow:0 0 30px rgba(61,222,255,.25); }
+.brand span { color:var(--primary); }
+.loader { width:48px; height:48px; border:5px solid rgba(250,250,250,.18); border-top-color:var(--primary); border-right-color:var(--hover); border-radius:50%; animation:rotate .9s linear infinite; }
+.splash-message { color:var(--body); font-size:19px; }
+@keyframes rotate { to { transform:rotate(360deg); } }
+
+.home { min-height:100%; padding:46px 54px 44px 132px; position:relative; background:var(--surface); }
+.home-backdrop { position:absolute; inset:0; z-index:0; background:center/cover no-repeat; opacity:.72; transition:background-image .35s ease; }
+.home-gradient { position:absolute; inset:0; z-index:1; background:linear-gradient(90deg,rgba(4,7,20,.96) 0%,rgba(4,7,20,.78) 35%,rgba(4,7,20,.12) 72%),linear-gradient(0deg,#121118 0%,rgba(18,17,24,.92) 8%,rgba(18,17,24,0) 55%); }
+.sidebar { position:absolute; z-index:4; left:0; top:0; bottom:0; width:92px; display:flex; align-items:center; justify-content:center; background:rgba(4,7,20,.62); border-right:1px solid rgba(255,255,255,.06); }
+.side-logo { font-weight:800; font-size:22px; letter-spacing:.05em; color:var(--primary); transform:rotate(-90deg); white-space:nowrap; }
+.home-content { position:relative; z-index:2; height:100%; display:flex; flex-direction:column; }
+.hero { min-height:310px; max-width:56%; display:flex; flex-direction:column; justify-content:center; }
+.eyebrow { color:var(--primary); font-size:16px; font-weight:800; letter-spacing:.1em; text-transform:uppercase; }
+.hero h1 { font-size:48px; line-height:1.05; margin:8px 0 12px; font-weight:800; max-width:850px; }
+.hero p { margin:0; color:var(--body); font-size:20px; line-height:1.45; max-width:760px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.hero-meta { margin-top:16px; color:#e0e0e4; font-size:16px; font-weight:600; }
+.hero-action { margin-top:23px; width:max-content; min-width:196px; padding:12px 22px; border:2px solid transparent; border-radius:8px; background:var(--primary); color:var(--ink); font-size:17px; font-weight:800; }
+.hero-action:focus, .hub-card:focus, .feature-card:focus { outline:none; border-color:var(--primary); box-shadow:0 0 0 4px rgba(61,222,255,.3); transform:scale(1.035); }
+.hero-pagination { margin-top:17px; color:rgba(255,255,255,.65); font-size:14px; }
+.section { margin-top:22px; }
+.section-title { margin:0 0 14px; color:rgba(255,255,255,.78); font-weight:800; font-size:17px; letter-spacing:.03em; }
+.row { display:flex; gap:16px; overflow:hidden; padding:5px; margin:-5px; }
+.hub-card,.feature-card { flex:0 0 auto; border:2px solid transparent; border-radius:12px; cursor:pointer; transition:transform .16s ease,box-shadow .16s ease; color:var(--text); }
+.hub-card { width:154px; height:70px; background:rgba(37,39,44,.94); display:grid; place-items:center; font-size:17px; font-weight:800; }
+.feature-card { width:190px; height:118px; padding:14px; display:flex; flex-direction:column; justify-content:end; text-align:left; background:var(--surface-alt) center/cover; box-shadow:inset 0 -65px 45px -35px rgba(0,0,0,.85); }
+.feature-card strong { font-size:17px; }
+.feature-card small { margin-top:4px; color:#d3d3d6; font-size:13px; }
+.empty { color:var(--body); font-size:18px; }
+.error-action { border:2px solid var(--primary); border-radius:8px; color:var(--primary); background:transparent; padding:12px 20px; font-weight:800; }
+@media (max-width:1280px) { .home { padding-left:108px; } .sidebar { width:76px; } .hero { max-width:64%; } .hero h1 { font-size:39px; } .hero p { font-size:17px; } }
