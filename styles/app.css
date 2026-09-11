@@ -1,10 +1,6 @@
-@font-face { font-family: Outfit; src: url('../assets/fonts/Outfit-Regular.ttf') format('truetype'); font-weight: 400; }
-@font-face { font-family: Outfit; src: url('../assets/fonts/Outfit-SemiBold.ttf') format('truetype'); font-weight: 600; }
-@font-face { font-family: Outfit; src: url('../assets/fonts/Outfit-Bold.ttf') format('truetype'); font-weight: 800; }
-
 :root { --primary:#3ddeff; --hover:#66bcff; --ink:#040714; --canvas:#17171c; --surface:#121118; --surface-alt:#25272c; --text:#fafafa; --body:#b7b8bd; --muted:#6f717b; }
 * { box-sizing:border-box; }
-html, body, #app { width:100%; height:100%; margin:0; overflow:hidden; background:var(--ink); color:var(--text); font-family:Outfit,Arial,sans-serif; }
+html, body, #app { width:100%; height:100%; margin:0; overflow:hidden; background:var(--ink); color:var(--text); font-family:Arial,sans-serif; }
 button { font:inherit; }
 
 .splash { height:100%; display:grid; place-items:center; background:radial-gradient(circle at 56% 38%,rgba(61,222,255,.22),transparent 25%), radial-gradient(circle at 84% 60%,rgba(101,25,138,.48),transparent 30%), linear-gradient(130deg,#020613,#071729 48%,#17071f); }
