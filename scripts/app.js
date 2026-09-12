@@ -4,7 +4,7 @@
   var API_BASE = 'https://acodes.pro/mytv_backend/api/';
   var APP_VERSION = '0.1.0';
   var app = document.getElementById('app');
-  var home = null, heroIndex = 0, heroTimer = null, catalogCache = {};
+  var home = null, heroIndex = 0, heroTimer = null, catalogCache = {}, ratingCache = {};
   var fallbackHero = { id:0, title:'BEM-VINDO AO MYTV', description:'Filmes, séries, esportes e TV ao vivo em um só lugar.', badge_text:'MYTV', rating_text:'LIVRE', backdrop_url:'assets/images/brand_background.png' };
   var hubs = [
     {id:'netflix',name:'Netflix',logo:'https://static.vecteezy.com/ti/vetor-gratis/p1/20190493-netflix-logotipo-netflix-icone-livre-gratis-vetor.jpg',intro:'assets/video/netflix.mp4'},
@@ -25,7 +25,7 @@
     return id;
   }
   function setSplash(message, failed) {
-    app.innerHTML='<section class="splash"><div class="splash-content"><img class="splash-brand" src="assets/images/brand_logo.png" alt="MyTV">'+
+    app.innerHTML='<section class="splash"><div class="splash-content">'+
       (failed ? '<div class="splash-message">'+escapeHtml(message)+'</div><button class="error-action" id="retry">Tentar novamente</button>' : '<div class="loader"></div><div class="splash-message">'+escapeHtml(message)+'</div>')+'</div></section>';
     if (failed) document.getElementById('retry').addEventListener('click', bootstrap);
   }
@@ -80,6 +80,26 @@
   function hubCard(hub) {
     return '<button class="hub-card" data-provider="'+hub.id+'"><img src="'+attrUrl(hub.logo)+'" alt="'+escapeHtml(hub.name)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'block\';"><span style="display:none">'+escapeHtml(hub.name)+'</span></button>';
   }
+  function icon(name) {
+    var paths={
+      search:'<circle cx="11" cy="11" r="6"></circle><path d="m16 16 4 4"></path>', home:'<path d="m3 11 9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"></path>',
+      favorites:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.9-8.6a5.5 5.5 0 0 0-.1-7.8z"></path>', sports:'<circle cx="12" cy="12" r="10"></circle><path d="m12 2 3 5-3 3-3-3 3-5zm-8 8 5-1 3 3-1 5-5-1-2-6zm16 0-5-1-3 3 1 5 5-1 2-6zM8 20l3-5h2l3 5"></path>',
+      live:'<rect x="3" y="5" width="18" height="13" rx="2"></rect><path d="m8 22 4-4 4 4M8 9h8"></path>', movies:'<rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="m7 4 3 4 3-4 3 4 3-4M7 20l3-4 3 4 3-4 3 4"></path>',
+      series:'<rect x="3" y="5" width="18" height="13" rx="2"></rect><path d="M8 2v3m8-3v3M8 21v1m8-1v1M3 10h18"></path>', settings:'<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.1 2.1-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5v.2h-3v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1-2.1-2.1.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H5v-3h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1 2.1-2.1.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.5V4h3v.2a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.1 2.1-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.5 1h.2v3h-.2a1.7 1.7 0 0 0-1.5 1z"></path>'
+    };
+    return '<svg viewBox="0 0 24 24" aria-hidden="true">'+paths[name]+'</svg>';
+  }
+  function sidebarMarkup(active) {
+    var entries=[{id:'search',label:'Buscar',icon:'search'},{id:'home',label:'Home',icon:'home'},{id:'favorites',label:'Favoritos',icon:'favorites'},{id:'sports',label:'Esportes',icon:'sports'},{id:'live',label:'TV ao Vivo',icon:'live'},{id:'movies',label:'Filmes',icon:'movies'},{id:'series',label:'Séries',icon:'series'},{id:'settings',label:'Configurações',icon:'settings'}];
+    return '<aside class="sidebar" aria-label="Menu principal"><nav class="side-menu">'+entries.map(function(entry){ return '<button class="side-menu-item '+(active===entry.id ? 'is-active' : '')+'" data-nav="'+entry.id+'" aria-label="'+entry.label+'" title="'+entry.label+'">'+icon(entry.icon)+'</button>'; }).join('')+'</nav></aside>';
+  }
+  function bindSidebar() { document.querySelectorAll('[data-nav]').forEach(function(button){ button.addEventListener('click',function(){ var page=button.getAttribute('data-nav'); if(page==='home') { renderHome(); return; } renderPlaceholder(page); }); }); }
+  function renderPlaceholder(page) {
+    clearInterval(heroTimer);
+    var labels={search:'Buscar',favorites:'Favoritos',sports:'Esportes',live:'TV ao Vivo',movies:'Filmes',series:'Séries',settings:'Configurações'};
+    app.innerHTML='<section class="placeholder-page">'+sidebarMarkup(page)+'<div class="placeholder-content"><h1>'+escapeHtml(labels[page] || '')+'</h1><p>Esta seção será adicionada nas próximas etapas do aplicativo Tizen.</p></div></section>';
+    bindSidebar();
+  }
   function featureCard(card) {
     var color=/^#[0-9a-f]{6}$/i.test(card.background_color || '') ? card.background_color : '#25272c';
     var image=card.image_url ? 'background-image:url(\''+cleanUrl(card.image_url)+'\');' : '';
@@ -91,9 +111,10 @@
     heroIndex=Math.max(0,Math.min(heroIndex,visible.length-1));
     var hero=visible[heroIndex];
     app.innerHTML='<section class="home"><div class="home-backdrop" style="background-image:url(\''+cleanUrl(hero.backdrop_url || 'assets/images/brand_background.png')+'\')"></div><div class="home-gradient"></div>'+
-      '<aside class="sidebar" aria-label="Menu"><img class="side-logo" src="assets/images/brand_logo.png" alt="MyTV"></aside><div class="home-content">'+renderHero(hero,heroIndex+1,visible.length)+
+      sidebarMarkup('home')+'<div class="home-content">'+renderHero(hero,heroIndex+1,visible.length)+
       '<section class="section"><h2 class="section-title">Plataformas de Streaming</h2><div class="row">'+hubs.map(hubCard).join('')+'</div></section>'+
       (cards.length ? '<section class="section"><h2 class="section-title">'+escapeHtml(settings.features_title || 'Aproveite ao máximo o App')+'</h2><div class="row">'+cards.map(featureCard).join('')+'</div></section>' : '')+'</div></section>';
+    bindSidebar();
     document.querySelectorAll('[data-provider]').forEach(function(button){ button.addEventListener('click',function(){ openStreaming(findHub(button.getAttribute('data-provider'))); }); });
     clearInterval(heroTimer);
     if (visible.length>1) heroTimer=setInterval(function(){ heroIndex=(heroIndex+1)%visible.length; renderHome(); },Math.max(3,Math.min(60,Number(settings.hero_interval_seconds) || 8))*1000);
@@ -102,28 +123,48 @@
 
   function openStreaming(hub) { clearInterval(heroTimer); renderStreaming(hub,true); }
   function renderStreaming(hub,showIntro) {
-    app.innerHTML='<section class="streaming-page"><div class="streaming-content"><button class="back-button" id="back-home">VOLTAR</button><div class="provider-heading"><img src="'+attrUrl(hub.logo)+'" alt="'+escapeHtml(hub.name)+'"><h1>'+escapeHtml(hub.name)+'</h1></div><div id="catalog"><p class="catalog-message">Carregando catálogo…</p></div></div></section>'+
+    app.innerHTML='<section class="streaming-page">'+sidebarMarkup('')+'<div class="streaming-content"><div class="provider-heading"><img src="'+attrUrl(hub.logo)+'" alt="'+escapeHtml(hub.name)+'"><h1>'+escapeHtml(hub.name)+'</h1></div><div id="catalog"><p class="catalog-message">Carregando catálogo…</p></div></div></section>'+
       (showIntro && hub.intro ? '<div class="intro"><video autoplay muted playsinline src="'+attrUrl(hub.intro)+'"></video></div>' : '');
-    document.getElementById('back-home').addEventListener('click',renderHome);
+    bindSidebar();
     var video=document.querySelector('.intro video');
     if(video) { function endIntro(){ var intro=document.querySelector('.intro'); if(intro) intro.remove(); } video.addEventListener('ended',endIntro); video.addEventListener('error',endIntro); }
     loadCatalog(hub).then(renderCatalog).catch(function(){ var target=document.getElementById('catalog'); if(target) target.innerHTML='<p class="catalog-message">Não foi possível carregar o catálogo agora.</p>'; });
   }
   function loadCatalog(hub) {
     if(catalogCache[hub.id]) return Promise.resolve(catalogCache[hub.id]);
-    var queries=[{title:'Top 10',collection:'trending'},{title:'Filmes em alta',collection:'trending',kind:'movie'},{title:'Séries em alta',collection:'trending',kind:'tv'},{title:'Lançamentos',collection:'releases'},{title:'Séries Originais '+hub.name,collection:'originals',kind:'tv'}];
-    return Promise.all(queries.map(function(query){
+    var queries=[{title:'Top 10',collection:'trending'},{title:'Filmes em alta',collection:'trending',kind:'movie'},{title:'Séries em alta',collection:'trending',kind:'tv'},{title:'Lançamentos',collection:'releases'},{title:'Séries Originais '+hub.name,collection:'originals',kind:'tv'},{title:'Filmes mais bem avaliados',collection:'acclaimed',kind:'movie'},{title:'Séries mais bem avaliadas',collection:'acclaimed',kind:'tv'}];
+    // Same restraint as Android: two catalogue calls at a time avoids a burst
+    // of requests when a provider page opens on a slower TV connection.
+    var next=0, loaded=[], failures=0;
+    function requestNext() {
+      if(next>=queries.length) return Promise.resolve();
+      var query=queries[next++];
       var args='?rating=all&page=1&provider='+encodeURIComponent(hub.name)+'&collection='+encodeURIComponent(query.collection)+(query.kind ? '&media_kind='+query.kind : '');
-      return request('search_tmdb.php'+args,{method:'GET'},15000).then(function(result){ return {title:query.title,items:(result.results || []).slice(0,10)}; }).catch(function(){ return {title:query.title,items:[]}; });
-    })).then(function(collections){ catalogCache[hub.id]=collections.filter(function(collection){ return collection.items.length; }); return catalogCache[hub.id]; });
+      return request('search_tmdb.php'+args,{method:'GET'},15000).then(function(result){ loaded.push({title:query.title,items:(result.results || []).slice(0,10)}); }).catch(function(error){ failures+=1; console.warn('[MYTV_TIZEN] catálogo '+query.collection, error); loaded.push({title:query.title,items:[]}); }).then(requestNext);
+    }
+    return Promise.all([requestNext(),requestNext()]).then(function(){ catalogCache[hub.id]=loaded.filter(function(collection){ return collection.items.length; }); if(!catalogCache[hub.id].length && failures===queries.length) throw new Error('Catálogo indisponível'); return catalogCache[hub.id]; });
   }
-  function mediaCard(item) { var image=item.poster_path || item.poster_url || '', title=item.title || item.name || ''; return '<button class="media-card" style="background-image:url(\''+cleanUrl(image)+'\')"><span>'+escapeHtml(title)+'</span></button>'; }
+  function mediaType(item) { var type=String(item.media_type || (item.name && !item.title ? 'tv' : 'movie')).toLowerCase(); if(type==='anime') return 'ANIME'; return type==='tv' || type==='series' ? 'SÉRIE' : 'FILME'; }
+  function ratingKey(item) { return String(item.media_type || (item.name && !item.title ? 'tv' : 'movie'))+':'+item.id; }
+  function ratingText(value) { return Number(value).toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1}); }
+  function mediaCard(item) {
+    var image=item.poster_thumb_url || item.poster_url || item.poster_path || '', title=item.title || item.name || 'Título não disponível', key=ratingKey(item), initial=item.imdb_rating || (String(item.rating_source || '').toLowerCase()==='imdb' ? item.vote_average : null);
+    return '<button class="media-card" data-media-id="'+escapeHtml(item.id)+'" data-media-type="'+escapeHtml(item.media_type || 'movie')+'"><span class="media-poster" style="background-image:url(\''+cleanUrl(image)+'\')"></span><span class="media-title">'+escapeHtml(title)+'</span><span class="media-bottom"><span class="imdb-mark"><img src="assets/images/imdb_logo.png" alt="IMDb"><b data-imdb="'+escapeHtml(key)+'">'+(initial ? ratingText(initial) : '—')+'</b></span><span class="media-kind">'+mediaType(item)+'</span></span></button>';
+  }
   function renderCatalog(collections) {
     var target=document.getElementById('catalog'); if(!target) return;
     if(!collections.length) { target.innerHTML='<p class="catalog-message">Nenhum título disponível neste catálogo agora.</p>'; return; }
-    target.innerHTML=collections.map(function(collection){ return '<section class="catalog-row"><h2>'+escapeHtml(collection.title)+'</h2><div class="row">'+collection.items.map(mediaCard).join('')+'</div></section>'; }).join('');
+    target.innerHTML=collections.map(function(collection){ return '<section class="catalog-row"><h2>'+escapeHtml(collection.title)+'</h2><div class="row catalog-items">'+collection.items.map(mediaCard).join('')+'</div></section>'; }).join('');
+    enrichRatings(collections);
   }
+  function enrichRatings(collections) {
+    var unique={};
+    collections.forEach(function(collection){ collection.items.forEach(function(item){ unique[ratingKey(item)]=item; }); });
+    Object.keys(unique).forEach(function(key){ var item=unique[key], cached=ratingCache[key]; if(cached !== undefined) { updateRating(key,cached); return; } request('get_imdb_rating.php?id='+encodeURIComponent(item.id)+'&type='+encodeURIComponent(item.media_type || (item.name && !item.title ? 'tv' : 'movie')),{method:'GET'},12000).then(function(result){ var value=result && result.imdb_rating; ratingCache[key]=value || null; updateRating(key,value); }).catch(function(){ ratingCache[key]=null; updateRating(key,null); }); });
+  }
+  function updateRating(key,value) { document.querySelectorAll('[data-imdb="'+key+'"]').forEach(function(node){ node.textContent=value ? ratingText(value) : '—'; }); }
   document.addEventListener('keydown',function(event){
+    if(document.querySelector('.streaming-page') && event.keyCode===10009) { renderHome(); return; }
     if(!home || document.querySelector('.streaming-page')) return;
     var heroes=home.heroes || []; if(!heroes.length) return;
     if(event.keyCode===37) { heroIndex=(heroIndex-1+heroes.length)%heroes.length; renderHome(); }
