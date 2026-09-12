@@ -329,6 +329,11 @@
   }
   function resolveVodSources(data) {
     var type=data.isTv ? 'series' : 'movie', args='?imdb_id='+encodeURIComponent(data.imdbId)+'&type='+type+'&season='+encodeURIComponent(data.season || 1)+'&episode='+encodeURIComponent(data.episode || 1);
+    // O servidor local é usado para a prévia no navegador. Como a VPS ainda
+    // não publica CORS nestes dois endpoints, usa a mesma rota Frost direta do Android.
+    if(window.location.hostname==='localhost' || window.location.hostname==='127.0.0.1') {
+      return frostVodSources(data).then(function(response){ return normalizeVodSources([response]); });
+    }
     return Promise.all([request('get_vod_sources.php'+args,{method:'GET'},14000).catch(function(){return null;}),request('get_nuvio_sources.php'+args,{method:'GET'},14000).catch(function(){return null;})]).then(function(responses){
       var sources=normalizeVodSources(responses);
       if(sources.length) return sources;
