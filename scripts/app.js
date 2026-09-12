@@ -265,7 +265,7 @@
   function vodAgeBanner(certification) { var value=String(certification || '').toUpperCase(), map={'TV-MA':'18','TV-14':'14','TV-PG':'10','TV-Y7':'Livre','PG-13':'14','R':'18'}, age=map[value] || certification; if(!age) return ''; return '<div class="vod-age-banner" id="vod-age-banner"><span class="age-badge age-'+escapeHtml(String(age).toLowerCase().replace(/[^a-z0-9]/g,''))+'">'+escapeHtml(age)+'</span><div><b>Classificação Indicativa</b><small>'+((age==='Livre')?'Livre para todos os públicos':'Não recomendado para menores de '+escapeHtml(age)+' anos')+'</small></div></div>'; }
   function openVod(data) {
     clearInterval(heroTimer); playerReturn={mediaId:data.mediaId,isTv:data.isTv,season:data.season};
-    app.innerHTML='<section class="vod-player"><div class="vod-backdrop" style="background-image:url(\''+cleanUrl(data.backdrop)+'\')"></div><div class="vod-loading"><div class="loader"></div><b>Preparando reprodução...</b><span>Buscando a melhor fonte disponível.</span></div></section>';
+    app.innerHTML='<section class="vod-player"><div class="vod-backdrop" style="background-image:url(\''+cleanUrl(data.backdrop)+'\')"></div><div class="vod-loading"><div class="loader"></div><b>Preparando reprodução...</b></div></section>';
     if(!data.imdbId) { renderVodError(data,'Não foi possível identificar este título para reprodução.'); return; }
     resolveVodSources(data).then(function(sources){ if(!sources.length) throw new Error('Nenhuma fonte de reprodução está disponível agora.'); renderVodPlayer(data,sources); }).catch(function(error){ renderVodError(data,error.message || 'Não foi possível preparar o vídeo.'); });
   }
