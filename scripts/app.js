@@ -3,6 +3,7 @@
 
   var API_BASE = 'https://acodes.pro/mytv_backend/api/';
   var APP_VERSION = '0.1.0';
+  var CATALOG_CACHE_TTL = 15 * 60 * 1000;
   var app = document.getElementById('app');
   var home = null, heroIndex = 0, heroTimer = null, catalogCache = {}, ratingCache = {};
   var fallbackHero = { id:0, title:'BEM-VINDO AO MYTV', description:'Filmes, séries, esportes e TV ao vivo em um só lugar.', badge_text:'MYTV', rating_text:'LIVRE', backdrop_url:'assets/images/brand_background.png' };
@@ -131,7 +132,8 @@
     loadCatalog(hub).then(renderCatalog).catch(function(){ var target=document.getElementById('catalog'); if(target) target.innerHTML='<p class="catalog-message">Não foi possível carregar o catálogo agora.</p>'; });
   }
   function loadCatalog(hub) {
-    if(catalogCache[hub.id]) return Promise.resolve(catalogCache[hub.id]);
+    var cached=catalogCache[hub.id];
+    if(cached && Date.now()-cached.time<CATALOG_CACHE_TTL) return Promise.resolve(cached.collections);
     var queries=[{title:'Top 10',collection:'trending'},{title:'Filmes em alta',collection:'trending',kind:'movie'},{title:'Séries em alta',collection:'trending',kind:'tv'},{title:'Lançamentos',collection:'releases'},{title:'Séries Originais '+hub.name,collection:'originals',kind:'tv'},{title:'Filmes mais bem avaliados',collection:'acclaimed',kind:'movie'},{title:'Séries mais bem avaliadas',collection:'acclaimed',kind:'tv'}];
     // Same restraint as Android: two catalogue calls at a time avoids a burst
     // of requests when a provider page opens on a slower TV connection.
@@ -142,7 +144,7 @@
       var args='?rating=all&page=1&provider='+encodeURIComponent(hub.name)+'&collection='+encodeURIComponent(query.collection)+(query.kind ? '&media_kind='+query.kind : '');
       return request('search_tmdb.php'+args,{method:'GET'},15000).then(function(result){ loaded.push({title:query.title,items:(result.results || []).slice(0,10)}); }).catch(function(error){ failures+=1; console.warn('[MYTV_TIZEN] catálogo '+query.collection, error); loaded.push({title:query.title,items:[]}); }).then(requestNext);
     }
-    return Promise.all([requestNext(),requestNext()]).then(function(){ catalogCache[hub.id]=loaded.filter(function(collection){ return collection.items.length; }); if(!catalogCache[hub.id].length && failures===queries.length) throw new Error('Catálogo indisponível'); return catalogCache[hub.id]; });
+    return Promise.all([requestNext(),requestNext()]).then(function(){ var collections=loaded.filter(function(collection){ return collection.items.length; }); if(!collections.length && failures===queries.length) throw new Error('Catálogo indisponível'); catalogCache[hub.id]={time:Date.now(),collections:collections}; return collections; });
   }
   function mediaType(item) { var type=String(item.media_type || (item.name && !item.title ? 'tv' : 'movie')).toLowerCase(); if(type==='anime') return 'ANIME'; return type==='tv' || type==='series' ? 'SÉRIE' : 'FILME'; }
   function ratingKey(item) { return String(item.media_type || (item.name && !item.title ? 'tv' : 'movie'))+':'+item.id; }
