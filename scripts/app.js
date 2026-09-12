@@ -8,12 +8,12 @@
   var home = null, heroIndex = 0, heroTimer = null, catalogCache = {}, ratingCache = {};
   var fallbackHero = { id:0, title:'BEM-VINDO AO MYTV', description:'Filmes, séries, esportes e TV ao vivo em um só lugar.', badge_text:'MYTV', rating_text:'LIVRE', backdrop_url:'assets/images/brand_background.png' };
   var hubs = [
-    {id:'netflix',name:'Netflix',logo:'https://static.vecteezy.com/ti/vetor-gratis/p1/20190493-netflix-logotipo-netflix-icone-livre-gratis-vetor.jpg',intro:'assets/video/netflix.mp4'},
-    {id:'prime',name:'Prime Video',logo:'https://rollingstone.com.br/wp-content/uploads/logo_prime_video_foto_reproducao.jpg',intro:'assets/video/primevideo.mp4'},
-    {id:'max',name:'HBO Max',logo:'https://i.pinimg.com/736x/c7/d6/b0/c7d6b09c6a4f721c831f157b3ebe9ed9.jpg',intro:'assets/video/hbomax.mp4'},
-    {id:'disney',name:'Disney+',logo:'https://disneyplusbrasil.com.br/wp-content/uploads/2024/03/Disney-Plus-novo-logotipo.jpg',intro:'assets/video/disneyplus.mp4'},
-    {id:'apple',name:'Apple TV+',logo:'https://1000logos.net/wp-content/uploads/2022/02/Apple-TV-Logo.jpg',intro:'assets/video/appletv.mp4'},
-    {id:'globoplay',name:'Globoplay',logo:'https://t2.tudocdn.net/602261?w=1200&h=1200',intro:''}
+    {id:'netflix',name:'Netflix',color:'#e50914',logo:'https://static.vecteezy.com/ti/vetor-gratis/p1/20190493-netflix-logotipo-netflix-icone-livre-gratis-vetor.jpg',intro:'assets/video/netflix.mp4'},
+    {id:'prime',name:'Prime Video',color:'#00a8e1',logo:'https://rollingstone.com.br/wp-content/uploads/logo_prime_video_foto_reproducao.jpg',intro:'assets/video/primevideo.mp4'},
+    {id:'max',name:'HBO Max',color:'#6c2bd9',logo:'https://i.pinimg.com/736x/c7/d6/b0/c7d6b09c6a4f721c831f157b3ebe9ed9.jpg',intro:'assets/video/hbomax.mp4'},
+    {id:'disney',name:'Disney+',color:'#0b63ce',logo:'https://disneyplusbrasil.com.br/wp-content/uploads/2024/03/Disney-Plus-novo-logotipo.jpg',intro:'assets/video/disneyplus.mp4'},
+    {id:'apple',name:'Apple TV+',color:'#55555a',logo:'https://1000logos.net/wp-content/uploads/2022/02/Apple-TV-Logo.jpg',intro:'assets/video/appletv.mp4'},
+    {id:'globoplay',name:'Globoplay',color:'#ff5b23',logo:'https://t2.tudocdn.net/602261?w=1200&h=1200',intro:''}
   ];
 
   function escapeHtml(value) { var div=document.createElement('div'); div.textContent=String(value || ''); return div.innerHTML; }
@@ -124,7 +124,10 @@
 
   function openStreaming(hub) { clearInterval(heroTimer); renderStreaming(hub,true); }
   function renderStreaming(hub,showIntro) {
-    app.innerHTML='<section class="streaming-page">'+sidebarMarkup('')+'<div class="streaming-content"><div class="provider-heading"><img src="'+attrUrl(hub.logo)+'" alt="'+escapeHtml(hub.name)+'"><h1>'+escapeHtml(hub.name)+'</h1></div><div id="catalog"><p class="catalog-message">Carregando catálogo…</p></div></div></section>'+
+    var color=/^#[0-9a-f]{6}$/i.test(hub.color || '') ? hub.color : '#25272c';
+    app.innerHTML='<section class="streaming-page" style="--provider-color:'+color+'">'+sidebarMarkup('')+
+      '<div class="provider-hero-art" style="background-image:url(\''+cleanUrl(hub.logo)+'\')"></div>'+
+      '<div class="streaming-content"><section class="provider-hero"><div class="provider-heading"><img src="'+attrUrl(hub.logo)+'" alt="'+escapeHtml(hub.name)+'"><h1>'+escapeHtml(hub.name)+'</h1></div></section><div id="catalog"><p class="catalog-message">Carregando catálogo…</p></div></div></section>'+
       (showIntro && hub.intro ? '<div class="intro"><video autoplay muted playsinline src="'+attrUrl(hub.intro)+'"></video></div>' : '');
     bindSidebar();
     var video=document.querySelector('.intro video');
