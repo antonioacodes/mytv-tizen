@@ -11,5 +11,7 @@
     <tizen:profile name="tv-samsung"/>
     <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
     <access origin="https://acodes.pro" subdomains="true"/>
+    <!-- As fontes de VOD e as artes são entregues por domínios dinâmicos. -->
+    <access origin="*" subdomains="true"/>
     <tizen:privilege name="http://tizen.org/privilege/internet"/>
 </widget>

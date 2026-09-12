@@ -222,10 +222,43 @@
     return '';
   }
   function detailMeta(item,isTv) { var year=(item.release_date || item.first_air_date || '').slice(0,4), parts=[]; if(year) parts.push(year); if(isTv && item.number_of_seasons) parts.push(item.number_of_seasons+' temporada'+(Number(item.number_of_seasons)===1?'':'s')); if(item.runtime) parts.push(duration(item.runtime)); return parts.join(' • '); }
+  function ageRatingInfo(rawRating) {
+    var rating=String(rawRating || '').trim().toUpperCase().replace(/ ANOS/g,'').replace(/\+/g,'');
+    if(!rating) return null;
+    var american={
+      'TV-MA':'Conteúdo destinado ao público adulto; pode ser inadequado para menores de 17 anos',
+      'TV-14':'Pode ser inadequado para menores de 14 anos; orientação dos responsáveis fortemente recomendada',
+      'TV-PG':'Orientação dos responsáveis recomendada; pode conter material inadequado para crianças',
+      'PG':'Orientação dos responsáveis recomendada; pode conter material inadequado para crianças',
+      'TV-G':'Conteúdo adequado ao público em geral',
+      'G':'Conteúdo adequado ao público em geral',
+      'TV-Y':'Conteúdo destinado a crianças de todas as idades',
+      'TV-Y7':'Destinado a crianças a partir de 7 anos',
+      'TV-Y7-FV':'Destinado a crianças a partir de 7 anos; contém violência fantasiosa',
+      'PG-13':'Pode ser inadequado para menores de 13 anos; atenção dos responsáveis recomendada',
+      'R':'Menores de 17 anos devem estar acompanhados por um responsável, segundo o sistema americano',
+      'NC-17':'Destinado a maiores de 17 anos, segundo o sistema americano'
+    };
+    if(american[rating]) return {label:rating,description:american[rating],heading:'Classificação Indicativa Americana',kind:'foreign'};
+    var brazilian={
+      'L':{label:'L',description:'Recomendado para todas as idades',kind:'livre'},
+      'LIVRE':{label:'L',description:'Recomendado para todas as idades',kind:'livre'},
+      '0':{label:'L',description:'Recomendado para todas as idades',kind:'livre'},
+      '10':{label:'10',description:'Não Recomendado para menores de 10 anos',kind:'10'},
+      '12':{label:'12',description:'Não Recomendado para menores de 12 anos',kind:'12'},
+      '14':{label:'14',description:'Não Recomendado para menores de 14 anos',kind:'14'},
+      '16':{label:'16',description:'Não Recomendado para menores de 16 anos',kind:'16'},
+      '18':{label:'18',description:'Não Recomendado para menores de 18 anos',kind:'18'}
+    };
+    return brazilian[rating] || {label:rating,description:'Classificação indicativa: '+rating,kind:'other'};
+  }
+  function ageBadge(info) {
+    var label=escapeHtml(info.label).replace('TV-','TV<br>');
+    return '<span class="age-badge age-'+escapeHtml(info.kind)+'">'+label+'</span>';
+  }
   function ageInfo(certification) {
-    var value=String(certification || '').trim(); if(!value) return '';
-    var map={'L':'Livre','0':'Livre','10':'10','12':'12','14':'14','16':'16','18':'18','TV-MA':'18','TV-14':'14','TV-PG':'10','TV-Y7':'Livre','PG-13':'14','R':'18'}, badge=map[value.toUpperCase()] || value;
-    return '<div class="detail-age"><span class="age-badge age-'+escapeHtml(badge.toLowerCase().replace(/[^a-z0-9]/g,''))+'">'+escapeHtml(badge)+'</span><div><b>'+((badge===value)?'Classificação indicativa americana':'Classificação indicativa')+'</b><small>'+((badge==='Livre')?'Livre para todos os públicos':(badge===value?'Classificação estrangeira. Verifique a recomendação de idade.':'Não recomendado para menores de '+escapeHtml(badge)+' anos'))+'</small></div></div>';
+    var info=ageRatingInfo(certification); if(!info) return '';
+    return '<div class="detail-age">'+ageBadge(info)+'<div><b>'+escapeHtml(info.heading || 'Classificação indicativa')+'</b><small>'+escapeHtml(info.description)+'</small></div></div>';
   }
   function renderMediaDetails(mediaId,isTv,season) {
     clearInterval(heroTimer);
@@ -283,23 +316,33 @@
   }
   function sourceQuality(source) { var text=String(source.name || source.title || source.description || '').toUpperCase(); return /4K|2160/.test(text)?4:/FHD|1080/.test(text)?3:/HD|720/.test(text)?2:/SD|480/.test(text)?1:0; }
   function decodePlayableUrl(value) { var raw=String(value || '').trim(); if(/^https?:\/\//i.test(raw)) return raw; var encoded=raw.replace(/^.*base64,/,'').replace(/-/g,'+').replace(/_/g,'/'); try { var decoded=atob(encoded); return /^https?:\/\//i.test(decoded) ? decoded : ''; } catch(error) { return ''; } }
+  function normalizeVodSources(responses) {
+    var seen={}, sources=[];
+    responses.forEach(function(response){ (response && response.streams || []).forEach(function(source){ var url=decodePlayableUrl(source.url); if(url && !seen[url]) { seen[url]=true; sources.push({name:source.name || source.title || 'Fonte',url:url,headers:source.headers || {},quality:sourceQuality(source)}); } }); });
+    return sources.sort(function(a,b){return b.quality-a.quality;}).slice(0,10);
+  }
+  function frostVodSources(data) {
+    var type=data.isTv ? 'series' : 'movie', id=data.isTv ? data.imdbId+':'+(data.season || 1)+':'+(data.episode || 1) : data.imdbId;
+    var controller=new AbortController(), timer=setTimeout(function(){controller.abort();},30000);
+    return fetch('https://froststream.cloutteam.com/stream/'+type+'/'+id+'.json',{signal:controller.signal}).then(function(response){ if(!response.ok) throw new Error('Fonte Frost indisponível'); return response.json(); }).finally(function(){clearTimeout(timer);});
+  }
   function resolveVodSources(data) {
     var type=data.isTv ? 'series' : 'movie', args='?imdb_id='+encodeURIComponent(data.imdbId)+'&type='+type+'&season='+encodeURIComponent(data.season || 1)+'&episode='+encodeURIComponent(data.episode || 1);
     return Promise.all([request('get_vod_sources.php'+args,{method:'GET'},14000).catch(function(){return null;}),request('get_nuvio_sources.php'+args,{method:'GET'},14000).catch(function(){return null;})]).then(function(responses){
-      var seen={}, sources=[];
-      responses.forEach(function(response){ (response && response.streams || []).forEach(function(source){ var url=decodePlayableUrl(source.url); if(url && !seen[url]) { seen[url]=true; sources.push({name:source.name || source.title || 'Fonte',url:url,headers:source.headers || {},quality:sourceQuality(source)}); } }); });
-      return sources.sort(function(a,b){return b.quality-a.quality;}).slice(0,10);
+      var sources=normalizeVodSources(responses);
+      if(sources.length) return sources;
+      return frostVodSources(data).then(function(response){ return normalizeVodSources([response]); });
     });
   }
   function formatTime(seconds) { seconds=Math.max(0,Math.floor(seconds || 0)); var h=Math.floor(seconds/3600), m=Math.floor(seconds%3600/60), s=seconds%60; return (h?h+':':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
-  function vodAgeBanner(certification) { var value=String(certification || '').toUpperCase(), map={'TV-MA':'18','TV-14':'14','TV-PG':'10','TV-Y7':'Livre','PG-13':'14','R':'18'}, age=map[value] || certification; if(!age) return ''; return '<div class="vod-age-banner" id="vod-age-banner"><span class="age-badge age-'+escapeHtml(String(age).toLowerCase().replace(/[^a-z0-9]/g,''))+'">'+escapeHtml(age)+'</span><div><b>Classificação Indicativa</b><small>'+((age==='Livre')?'Livre para todos os públicos':'Não recomendado para menores de '+escapeHtml(age)+' anos')+'</small></div></div>'; }
+  function vodAgeBanner(certification) { var info=ageRatingInfo(certification); if(!info) return ''; return '<div class="vod-age-banner" id="vod-age-banner">'+ageBadge(info)+'<div><b>'+escapeHtml(info.heading || 'Classificação indicativa')+'</b><small>'+escapeHtml(info.description)+'</small></div></div>'; }
   function openVod(data) {
     clearInterval(heroTimer); playerReturn={mediaId:data.mediaId,isTv:data.isTv,season:data.season};
     app.innerHTML='<section class="vod-player"><div class="vod-backdrop" style="background-image:url(\''+cleanUrl(data.backdrop)+'\')"></div><div class="vod-loading"><div class="loader"></div><b>Preparando reprodução...</b></div></section>';
     if(!data.imdbId) { renderVodError(data,'Não foi possível identificar este título para reprodução.'); return; }
     resolveVodSources(data).then(function(sources){ if(!sources.length) throw new Error('Nenhuma fonte de reprodução está disponível agora.'); renderVodPlayer(data,sources); }).catch(function(error){ renderVodError(data,error.message || 'Não foi possível preparar o vídeo.'); });
   }
-  function renderVodError(data,message) { app.innerHTML='<section class="vod-player vod-error"><div class="vod-backdrop" style="background-image:url(\''+cleanUrl(data.backdrop)+'\')"></div><div class="vod-error-card"><strong>Não foi possível carregar a mídia</strong><span>'+escapeHtml(message)+'</span><button id="vod-back-error">VOLTAR</button></div></section>'; document.getElementById('vod-back-error').addEventListener('click',returnFromVod); }
+  function renderVodError(data,message) { app.innerHTML='<section class="vod-player vod-error"><div class="vod-error-card"><div class="vod-error-icon">!</div><strong>Não foi possível carregar a mídia</strong><span>'+escapeHtml(message)+'</span><button id="vod-back-error">VOLTAR</button></div></section>'; document.getElementById('vod-back-error').addEventListener('click',returnFromVod); }
   function returnFromVod() { var target=playerReturn; if(target) renderMediaDetails(target.mediaId,target.isTv,target.season); else renderHome(); }
   function fetchVodSubtitles(data) {
     var id=data.isTv ? data.imdbId+':'+(data.season || 1)+':'+(data.episode || 1) : data.imdbId, type=data.isTv?'series':'movie';
