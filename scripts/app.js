@@ -5,7 +5,7 @@
   var APP_VERSION = '0.1.0';
   var CATALOG_CACHE_TTL = 15 * 60 * 1000;
   var app = document.getElementById('app');
-  var home = null, heroIndex = 0, heroTimer = null, catalogCache = {}, ratingCache = {};
+  var home = null, heroIndex = 0, heroTimer = null, catalogCache = {}, ratingCache = {}, detailsCache = {}, activeStreamingHub = null;
   var fallbackHero = { id:0, title:'BEM-VINDO AO MYTV', description:'Filmes, séries, esportes e TV ao vivo em um só lugar.', badge_text:'MYTV', rating_text:'LIVRE', backdrop_url:'assets/images/brand_background.png' };
   var hubs = [
     {id:'netflix',name:'Netflix',color:'#e50914',logo:'https://static.vecteezy.com/ti/vetor-gratis/p1/20190493-netflix-logotipo-netflix-icone-livre-gratis-vetor.jpg',intro:'assets/video/netflix.mp4'},
@@ -122,16 +122,16 @@
   }
   function findHub(id) { for(var i=0;i<hubs.length;i+=1) if(hubs[i].id===id) return hubs[i]; return hubs[0]; }
 
-  function openStreaming(hub) { clearInterval(heroTimer); renderStreaming(hub,true); }
+  function openStreaming(hub) { clearInterval(heroTimer); activeStreamingHub=hub; renderStreaming(hub,true); }
   function renderStreaming(hub,showIntro) {
     var color=/^#[0-9a-f]{6}$/i.test(hub.color || '') ? hub.color : '#25272c';
     app.innerHTML='<section class="streaming-page" style="--provider-color:'+color+'">'+sidebarMarkup('')+
       '<div class="provider-hero-art" style="background-image:url(\''+cleanUrl(hub.logo)+'\')"></div>'+
-      '<div class="streaming-content"><section class="provider-hero"><div class="provider-heading"><img src="'+attrUrl(hub.logo)+'" alt="'+escapeHtml(hub.name)+'"><h1>'+escapeHtml(hub.name)+'</h1></div></section><div id="catalog"><p class="catalog-message">Carregando catálogo…</p></div></div></section>'+
-      (showIntro && hub.intro ? '<div class="intro"><video autoplay muted playsinline src="'+attrUrl(hub.intro)+'"></video></div>' : '');
+      '<div class="streaming-content"><section class="provider-hero"><div class="provider-heading"><h1>'+escapeHtml(hub.name)+'</h1></div></section><div id="catalog"><p class="catalog-message">Carregando catálogo…</p></div></div></section>'+
+      (showIntro && hub.intro ? '<div class="intro"><video autoplay playsinline src="'+attrUrl(hub.intro)+'"></video></div>' : '');
     bindSidebar();
     var video=document.querySelector('.intro video');
-    if(video) { function endIntro(){ var intro=document.querySelector('.intro'); if(intro) intro.remove(); } video.addEventListener('ended',endIntro); video.addEventListener('error',endIntro); }
+    if(video) { video.muted=false; video.volume=1; video.play().catch(function(error){ console.warn('[MYTV_TIZEN] introdução sem reprodução automática',error); }); function endIntro(){ var intro=document.querySelector('.intro'); if(intro) intro.remove(); } video.addEventListener('ended',endIntro); video.addEventListener('error',endIntro); }
     loadCatalog(hub).then(renderCatalog).catch(function(){ var target=document.getElementById('catalog'); if(target) target.innerHTML='<p class="catalog-message">Não foi possível carregar o catálogo agora.</p>'; });
   }
   function loadCatalog(hub) {
@@ -160,6 +160,7 @@
     var target=document.getElementById('catalog'); if(!target) return;
     if(!collections.length) { target.innerHTML='<p class="catalog-message">Nenhum título disponível neste catálogo agora.</p>'; return; }
     target.innerHTML=collections.map(function(collection){ return '<section class="catalog-row"><h2>'+escapeHtml(collection.title)+'</h2><div class="row catalog-items">'+collection.items.map(mediaCard).join('')+'</div></section>'; }).join('');
+    target.querySelectorAll('.media-card').forEach(function(card){ card.addEventListener('click',function(){ renderMediaDetails(Number(card.getAttribute('data-media-id')), String(card.getAttribute('data-media-type')).toLowerCase()==='tv'); }); });
     enrichRatings(collections);
   }
   function enrichRatings(collections) {
@@ -168,7 +169,48 @@
     Object.keys(unique).forEach(function(key){ var item=unique[key], cached=ratingCache[key]; if(cached !== undefined) { updateRating(key,cached); return; } request('get_imdb_rating.php?id='+encodeURIComponent(item.id)+'&type='+encodeURIComponent(item.media_type || (item.name && !item.title ? 'tv' : 'movie')),{method:'GET'},12000).then(function(result){ var value=result && result.imdb_rating; ratingCache[key]=value || null; updateRating(key,value); }).catch(function(){ ratingCache[key]=null; updateRating(key,null); }); });
   }
   function updateRating(key,value) { document.querySelectorAll('[data-imdb="'+key+'"]').forEach(function(node){ node.textContent=value ? ratingText(value) : '—'; }); }
+  function duration(minutes) { var total=Number(minutes)||0, hours=Math.floor(total/60), rest=total%60; return hours ? hours+' h'+(rest ? ' '+rest+' min' : '') : total+' min'; }
+  function detailKey(id,isTv) { return (isTv?'tv':'movie')+':'+id; }
+  function detailTitle(item) { return item.title || item.name || 'Título não disponível'; }
+  function detailsRatings(item,ratings) {
+    var values=(ratings || {}).ratings || {}, imdb=(ratings || {}).imdb_rating || item.imdb_rating;
+    var labels=[['tmdb','TMDB','cyan'],['trakt','◉','red'],['tomatoes','●','tomato'],['audience','●','tomato'],['metacritic','M','yellow']];
+    var html=imdb ? '<span class="detail-imdb"><img src="assets/images/imdb_logo.png" alt="IMDb">'+ratingText(imdb)+'</span>' : '';
+    labels.forEach(function(entry){ var value=values[entry[0]]; if(value!==undefined && value!==null) html+='<span class="detail-rating '+entry[2]+'"><b>'+entry[1]+'</b> '+escapeHtml(Number(value).toLocaleString('pt-BR',{maximumFractionDigits:0}))+(entry[0]==='tomatoes'||entry[0]==='audience'?'%':'')+'</span>'; });
+    return html;
+  }
+  function detailMeta(item,isTv) { var year=(item.release_date || item.first_air_date || '').slice(0,4), parts=[]; if(year) parts.push(year); if(isTv && item.number_of_seasons) parts.push(item.number_of_seasons+' temporada'+(Number(item.number_of_seasons)===1?'':'s')); if(item.runtime) parts.push(duration(item.runtime)); return parts.join(' • '); }
+  function ageInfo(certification) {
+    var value=String(certification || '').trim(); if(!value) return '';
+    var map={'L':'Livre','0':'Livre','10':'10','12':'12','14':'14','16':'16','18':'18','TV-MA':'18','TV-14':'14','TV-PG':'10','TV-Y7':'Livre','PG-13':'14','R':'18'}, badge=map[value.toUpperCase()] || value;
+    return '<div class="detail-age"><span class="age-badge age-'+escapeHtml(badge.toLowerCase().replace(/[^a-z0-9]/g,''))+'">'+escapeHtml(badge)+'</span><div><b>'+((badge===value)?'Classificação indicativa americana':'Classificação indicativa')+'</b><small>'+((badge==='Livre')?'Livre para todos os públicos':(badge===value?'Classificação estrangeira. Verifique a recomendação de idade.':'Não recomendado para menores de '+escapeHtml(badge)+' anos'))+'</small></div></div>';
+  }
+  function renderMediaDetails(mediaId,isTv) {
+    clearInterval(heroTimer);
+    var key=detailKey(mediaId,isTv), cached=detailsCache[key];
+    app.innerHTML='<section class="media-details"><div class="details-loading">Carregando detalhes…</div></section>';
+    function show(payload) {
+      var item=payload.item || {}, episodes=payload.episodes || [], backdrop=item.backdrop_large_url || item.backdrop_url || '', logo=item.logo_url, title=detailTitle(item), genres=(item.genres || []).map(function(genre){ return genre.name; }).join(' • ');
+      var seasonButtons=(item.seasons || []).filter(function(season){ return Number(season.season_number)>0; }).map(function(season,index){ return '<button class="season-tab '+(index===0?'selected':'')+'">Temporada '+escapeHtml(season.season_number)+'</button>'; }).join('');
+      var episodeCards=episodes.map(function(episode){ return '<article class="episode-card">'+(episode.still_url?'<img src="'+attrUrl(episode.still_url)+'" alt="">':'')+'<div><b>T'+escapeHtml(episode.season_number || 1)+'E'+escapeHtml(episode.episode_number)+' • '+escapeHtml(episode.name || 'Episódio')+'</b><small>'+escapeHtml(episode.runtime?duration(episode.runtime):'')+'</small></div></article>'; }).join('');
+      var providers=(item.streaming_providers || []).map(function(provider){ return '<div class="detail-provider">'+(provider.logo_url?'<img src="'+attrUrl(provider.logo_url)+'" alt="">':'')+'<span>'+escapeHtml(provider.name)+'</span></div>'; }).join('');
+      app.innerHTML='<section class="media-details"><div class="details-backdrop" style="background-image:url(\''+cleanUrl(backdrop)+'\')"></div><div class="details-gradient"></div><button class="details-back" id="details-back">← <span>VOLTAR</span></button><main class="details-content"><section class="details-hero">'+
+        (logo?'<img class="details-logo" src="'+attrUrl(logo)+'" alt="'+escapeHtml(title)+'">':'<h1>'+escapeHtml(title)+'</h1>')+
+        '<div class="details-meta">'+escapeHtml(detailMeta(item,isTv))+'</div><div class="details-ratings" id="details-ratings">'+detailsRatings(item,payload.ratings)+'</div>'+(genres?'<div class="details-genres">'+escapeHtml(genres)+'</div>':'')+'</section>'+
+        '<section class="details-body"><p class="details-overview">'+escapeHtml(item.overview || 'Sinopse indisponível.')+'</p>'+ageInfo(item.certification)+'<div class="details-actions"><button class="primary-action">▶ ASSISTIR</button><button class="secondary-action">♡ FAVORITAR</button></div>'+
+        (isTv && seasonButtons?'<h2>Temporadas</h2><div class="season-tabs">'+seasonButtons+'</div><h2>Episódios</h2><div class="episode-row">'+episodeCards+'</div>':'')+
+        (providers?'<h2>Disponível em</h2><div class="detail-providers">'+providers+'</div>':'')+
+        ((item.similar_titles || []).length?'<h2>Títulos semelhantes</h2><div class="row detail-similar">'+item.similar_titles.map(mediaCard).join('')+'</div>':'')+
+        '<h2>Informações</h2><div class="details-info">'+escapeHtml([genres,item.original_title && item.original_title!==title?'Título original: '+item.original_title:'',item.number_of_seasons?(item.number_of_seasons+' temporadas • '+(item.number_of_episodes || 0)+' episódios'):'',item.imdb_id?'IMDb: '+item.imdb_id:'','Metadados: TMDB • Disponibilidade: JustWatch (Brasil)'].filter(Boolean).join('\n'))+'</div></section></main></section>';
+      document.getElementById('details-back').addEventListener('click',function(){ if(activeStreamingHub) renderStreaming(activeStreamingHub,false); else renderHome(); });
+      document.querySelectorAll('.detail-similar .media-card').forEach(function(card){ card.addEventListener('click',function(){ renderMediaDetails(Number(card.getAttribute('data-media-id')),String(card.getAttribute('data-media-type')).toLowerCase()==='tv'); }); });
+      request('get_imdb_rating.php?id='+encodeURIComponent(mediaId)+'&type='+(isTv?'tv':'movie'),{method:'GET'},12000).then(function(ratings){ var node=document.getElementById('details-ratings'); if(node) node.innerHTML=detailsRatings(item,ratings); }).catch(function(){});
+    }
+    if(cached && Date.now()-cached.time<15*60*1000) { show(cached.data); return; }
+    request('get_media_details.php?id='+encodeURIComponent(mediaId)+'&type='+(isTv?'tv':'movie')+(isTv?'&season_number=1':''),{method:'GET'},20000).then(function(data){ if(!data || !data.item) throw new Error('Detalhes indisponíveis'); detailsCache[key]={time:Date.now(),data:data}; show(data); }).catch(function(){ var target=document.querySelector('.details-loading'); if(target) target.textContent='Não foi possível carregar os detalhes agora.'; });
+  }
   document.addEventListener('keydown',function(event){
+    if(document.querySelector('.media-details') && (event.keyCode===10009 || event.keyCode===27)) { if(activeStreamingHub) renderStreaming(activeStreamingHub,false); else renderHome(); return; }
     if(document.querySelector('.streaming-page') && event.keyCode===10009) { renderHome(); return; }
     if(!home || document.querySelector('.streaming-page')) return;
     var heroes=home.heroes || []; if(!heroes.length) return;
