@@ -5,7 +5,7 @@
   var APP_VERSION = '0.1.0';
   var CATALOG_CACHE_TTL = 15 * 60 * 1000;
   var app = document.getElementById('app');
-  var home = null, heroIndex = 0, heroTimer = null, catalogCache = {}, ratingCache = {}, detailsCache = {}, activeStreamingHub = null;
+  var home = null, heroIndex = 0, heroTimer = null, catalogCache = {}, ratingCache = {}, detailsCache = {}, activeStreamingHub = null, detailsOrigin = 'home', searchState = {query:'',platform:'Todas',genre:'Todos',rating:'all',type:'all',submitted:false,loading:false,results:[]};
   var fallbackHero = { id:0, title:'BEM-VINDO AO MYTV', description:'Filmes, séries, esportes e TV ao vivo em um só lugar.', badge_text:'MYTV', rating_text:'LIVRE', backdrop_url:'assets/images/brand_background.png' };
   var hubs = [
     {id:'netflix',name:'Netflix',color:'#e50914',logo:'https://static.vecteezy.com/ti/vetor-gratis/p1/20190493-netflix-logotipo-netflix-icone-livre-gratis-vetor.jpg',intro:'assets/video/netflix.mp4'},
@@ -94,7 +94,7 @@
     var entries=[{id:'search',label:'Buscar',icon:'search'},{id:'home',label:'Home',icon:'home'},{id:'favorites',label:'Favoritos',icon:'favorites'},{id:'sports',label:'Esportes',icon:'sports'},{id:'live',label:'TV ao Vivo',icon:'live'},{id:'movies',label:'Filmes',icon:'movies'},{id:'series',label:'Séries',icon:'series'},{id:'settings',label:'Configurações',icon:'settings'}];
     return '<aside class="sidebar" aria-label="Menu principal"><nav class="side-menu">'+entries.map(function(entry){ return '<button class="side-menu-item '+(active===entry.id ? 'is-active' : '')+'" data-nav="'+entry.id+'" aria-label="'+entry.label+'" title="'+entry.label+'">'+icon(entry.icon)+'</button>'; }).join('')+'</nav></aside>';
   }
-  function bindSidebar() { document.querySelectorAll('[data-nav]').forEach(function(button){ button.addEventListener('click',function(){ var page=button.getAttribute('data-nav'); if(page==='home') { renderHome(); return; } renderPlaceholder(page); }); }); }
+  function bindSidebar() { document.querySelectorAll('[data-nav]').forEach(function(button){ button.addEventListener('click',function(){ var page=button.getAttribute('data-nav'); if(page==='home') { renderHome(); return; } if(page==='search') { renderSearch(); return; } renderPlaceholder(page); }); }); }
   function renderPlaceholder(page) {
     clearInterval(heroTimer);
     var labels={search:'Buscar',favorites:'Favoritos',sports:'Esportes',live:'TV ao Vivo',movies:'Filmes',series:'Séries',settings:'Configurações'};
@@ -160,7 +160,7 @@
     var target=document.getElementById('catalog'); if(!target) return;
     if(!collections.length) { target.innerHTML='<p class="catalog-message">Nenhum título disponível neste catálogo agora.</p>'; return; }
     target.innerHTML=collections.map(function(collection){ return '<section class="catalog-row"><h2>'+escapeHtml(collection.title)+'</h2><div class="row catalog-items">'+collection.items.map(mediaCard).join('')+'</div></section>'; }).join('');
-    target.querySelectorAll('.media-card').forEach(function(card){ card.addEventListener('click',function(){ renderMediaDetails(Number(card.getAttribute('data-media-id')), String(card.getAttribute('data-media-type')).toLowerCase()==='tv'); }); });
+    target.querySelectorAll('.media-card').forEach(function(card){ card.addEventListener('click',function(){ detailsOrigin='streaming'; renderMediaDetails(Number(card.getAttribute('data-media-id')), String(card.getAttribute('data-media-type')).toLowerCase()==='tv'); }); });
     enrichRatings(collections);
   }
   function enrichRatings(collections) {
@@ -170,14 +170,19 @@
   }
   function updateRating(key,value) { document.querySelectorAll('[data-imdb="'+key+'"]').forEach(function(node){ node.textContent=value ? ratingText(value) : '—'; }); }
   function duration(minutes) { var total=Number(minutes)||0, hours=Math.floor(total/60), rest=total%60; return hours ? hours+' h'+(rest ? ' '+rest+' min' : '') : total+' min'; }
-  function detailKey(id,isTv) { return (isTv?'tv':'movie')+':'+id; }
+  function detailKey(id,isTv,season) { return (isTv?'tv':'movie')+':'+id+':'+(season || 0); }
   function detailTitle(item) { return item.title || item.name || 'Título não disponível'; }
   function detailsRatings(item,ratings) {
     var values=(ratings || {}).ratings || {}, imdb=(ratings || {}).imdb_rating || item.imdb_rating;
-    var labels=[['tmdb','TMDB','cyan'],['trakt','◉','red'],['tomatoes','●','tomato'],['audience','●','tomato'],['metacritic','M','yellow']];
+    var labels=[['tmdb','rating_tmdb.svg','cyan','TMDB'],['trakt','rating_trakt.svg','red','Trakt'],['tomatoes','rating_tomatoes.svg','tomato','Rotten Tomatoes: crítica'],['audience','rating_audience.svg','tomato','Rotten Tomatoes: público'],['metacritic','rating_metacritic.svg','yellow','Metacritic']];
     var html=imdb ? '<span class="detail-imdb"><img src="assets/images/imdb_logo.png" alt="IMDb">'+ratingText(imdb)+'</span>' : '';
-    labels.forEach(function(entry){ var value=values[entry[0]]; if(value!==undefined && value!==null) html+='<span class="detail-rating '+entry[2]+'"><b>'+entry[1]+'</b> '+escapeHtml(Number(value).toLocaleString('pt-BR',{maximumFractionDigits:0}))+(entry[0]==='tomatoes'||entry[0]==='audience'?'%':'')+'</span>'; });
+    labels.forEach(function(entry){ var value=values[entry[0]]; if(value!==undefined && value!==null) html+='<span class="detail-rating '+entry[2]+'"><img src="assets/images/'+entry[1]+'" alt="'+entry[3]+'">'+escapeHtml(Number(value).toLocaleString('pt-BR',{maximumFractionDigits:0}))+(entry[0]==='tomatoes'||entry[0]==='audience'?'%':'')+'</span>'; });
     return html;
+  }
+  function mediaLogoUrl(result) {
+    var candidates=[result && result.logo_url,result && result.url,result && result.logo,result && result.image_url,result && result.data && result.data.logo_url,result && result.data && result.data.url,result && result.item && result.item.logo_url];
+    for(var i=0;i<candidates.length;i+=1) if(typeof candidates[i]==='string' && candidates[i].trim()) return candidates[i];
+    return '';
   }
   function detailMeta(item,isTv) { var year=(item.release_date || item.first_air_date || '').slice(0,4), parts=[]; if(year) parts.push(year); if(isTv && item.number_of_seasons) parts.push(item.number_of_seasons+' temporada'+(Number(item.number_of_seasons)===1?'':'s')); if(item.runtime) parts.push(duration(item.runtime)); return parts.join(' • '); }
   function ageInfo(certification) {
@@ -185,13 +190,14 @@
     var map={'L':'Livre','0':'Livre','10':'10','12':'12','14':'14','16':'16','18':'18','TV-MA':'18','TV-14':'14','TV-PG':'10','TV-Y7':'Livre','PG-13':'14','R':'18'}, badge=map[value.toUpperCase()] || value;
     return '<div class="detail-age"><span class="age-badge age-'+escapeHtml(badge.toLowerCase().replace(/[^a-z0-9]/g,''))+'">'+escapeHtml(badge)+'</span><div><b>'+((badge===value)?'Classificação indicativa americana':'Classificação indicativa')+'</b><small>'+((badge==='Livre')?'Livre para todos os públicos':(badge===value?'Classificação estrangeira. Verifique a recomendação de idade.':'Não recomendado para menores de '+escapeHtml(badge)+' anos'))+'</small></div></div>';
   }
-  function renderMediaDetails(mediaId,isTv) {
+  function renderMediaDetails(mediaId,isTv,season) {
     clearInterval(heroTimer);
-    var key=detailKey(mediaId,isTv), cached=detailsCache[key];
-    app.innerHTML='<section class="media-details"><div class="details-loading">Carregando detalhes…</div></section>';
+    season=season || 1;
+    var key=detailKey(mediaId,isTv,season), cached=detailsCache[key];
+    app.innerHTML='<section class="media-details"><div class="details-loading"><div class="loader"></div><span>Carregando detalhes…</span></div></section>';
     function show(payload) {
       var item=payload.item || {}, episodes=payload.episodes || [], backdrop=item.backdrop_large_url || item.backdrop_url || '', logo=item.logo_url, title=detailTitle(item), genres=(item.genres || []).map(function(genre){ return genre.name; }).join(' • ');
-      var seasonButtons=(item.seasons || []).filter(function(season){ return Number(season.season_number)>0; }).map(function(season,index){ return '<button class="season-tab '+(index===0?'selected':'')+'">Temporada '+escapeHtml(season.season_number)+'</button>'; }).join('');
+      var seasonButtons=(item.seasons || []).filter(function(entry){ return Number(entry.season_number)>0; }).map(function(entry){ return '<button class="season-tab '+(Number(entry.season_number)===Number(season)?'selected':'')+'" data-season="'+escapeHtml(entry.season_number)+'">T'+escapeHtml(entry.season_number)+'</button>'; }).join('');
       var episodeCards=episodes.map(function(episode){ return '<article class="episode-card">'+(episode.still_url?'<img src="'+attrUrl(episode.still_url)+'" alt="">':'')+'<div><b>T'+escapeHtml(episode.season_number || 1)+'E'+escapeHtml(episode.episode_number)+' • '+escapeHtml(episode.name || 'Episódio')+'</b><small>'+escapeHtml(episode.runtime?duration(episode.runtime):'')+'</small></div></article>'; }).join('');
       var providers=(item.streaming_providers || []).map(function(provider){ return '<div class="detail-provider">'+(provider.logo_url?'<img src="'+attrUrl(provider.logo_url)+'" alt="">':'')+'<span>'+escapeHtml(provider.name)+'</span></div>'; }).join('');
       app.innerHTML='<section class="media-details"><div class="details-backdrop" style="background-image:url(\''+cleanUrl(backdrop)+'\')"></div><div class="details-gradient"></div><button class="details-back" id="details-back">← <span>VOLTAR</span></button><main class="details-content"><section class="details-hero">'+
@@ -202,15 +208,41 @@
         (providers?'<h2>Disponível em</h2><div class="detail-providers">'+providers+'</div>':'')+
         ((item.similar_titles || []).length?'<h2>Títulos semelhantes</h2><div class="row detail-similar">'+item.similar_titles.map(mediaCard).join('')+'</div>':'')+
         '<h2>Informações</h2><div class="details-info">'+escapeHtml([genres,item.original_title && item.original_title!==title?'Título original: '+item.original_title:'',item.number_of_seasons?(item.number_of_seasons+' temporadas • '+(item.number_of_episodes || 0)+' episódios'):'',item.imdb_id?'IMDb: '+item.imdb_id:'','Metadados: TMDB • Disponibilidade: JustWatch (Brasil)'].filter(Boolean).join('\n'))+'</div></section></main></section>';
-      document.getElementById('details-back').addEventListener('click',function(){ if(activeStreamingHub) renderStreaming(activeStreamingHub,false); else renderHome(); });
-      document.querySelectorAll('.detail-similar .media-card').forEach(function(card){ card.addEventListener('click',function(){ renderMediaDetails(Number(card.getAttribute('data-media-id')),String(card.getAttribute('data-media-type')).toLowerCase()==='tv'); }); });
+      document.getElementById('details-back').addEventListener('click',function(){ if(detailsOrigin==='search') renderSearch(); else if(activeStreamingHub) renderStreaming(activeStreamingHub,false); else renderHome(); });
+      document.querySelectorAll('.season-tab').forEach(function(tab){ tab.addEventListener('click',function(){ renderMediaDetails(mediaId,isTv,Number(tab.getAttribute('data-season'))); }); });
+      document.querySelectorAll('.detail-similar .media-card').forEach(function(card){ card.addEventListener('click',function(){ renderMediaDetails(Number(card.getAttribute('data-media-id')),String(card.getAttribute('data-media-type')).toLowerCase()==='tv',1); }); });
       request('get_imdb_rating.php?id='+encodeURIComponent(mediaId)+'&type='+(isTv?'tv':'movie'),{method:'GET'},12000).then(function(ratings){ var node=document.getElementById('details-ratings'); if(node) node.innerHTML=detailsRatings(item,ratings); }).catch(function(){});
+      request('get_media_logo.php?id='+encodeURIComponent(mediaId)+'&type='+(isTv?'tv':'movie'),{method:'GET'},12000).then(function(result){ var image=mediaLogoUrl(result), current=document.querySelector('.details-logo'), heading=document.querySelector('.details-hero h1'); if(!image) return; if(current) current.src=cleanUrl(image); else if(heading) heading.outerHTML='<img class="details-logo" src="'+attrUrl(image)+'" alt="'+escapeHtml(title)+'">'; }).catch(function(){});
     }
     if(cached && Date.now()-cached.time<15*60*1000) { show(cached.data); return; }
-    request('get_media_details.php?id='+encodeURIComponent(mediaId)+'&type='+(isTv?'tv':'movie')+(isTv?'&season_number=1':''),{method:'GET'},20000).then(function(data){ if(!data || !data.item) throw new Error('Detalhes indisponíveis'); detailsCache[key]={time:Date.now(),data:data}; show(data); }).catch(function(){ var target=document.querySelector('.details-loading'); if(target) target.textContent='Não foi possível carregar os detalhes agora.'; });
+    request('get_media_details.php?id='+encodeURIComponent(mediaId)+'&type='+(isTv?'tv':'movie')+(isTv?'&season_number='+encodeURIComponent(season):''),{method:'GET'},20000).then(function(data){ if(!data || !data.item) throw new Error('Detalhes indisponíveis'); detailsCache[key]={time:Date.now(),data:data}; show(data); }).catch(function(){ var target=document.querySelector('.details-loading'); if(target) target.textContent='Não foi possível carregar os detalhes agora.'; });
+  }
+  function keyboardMarkup() {
+    var rows=['abcdefg','hijklmn','opqrstu','vwxyz','1234567890'];
+    return '<div class="search-keyboard"><div class="search-query">'+escapeHtml(searchState.query || 'Digite um título')+'</div><div class="keyboard-actions"><button data-key-action="clear">LIMPAR</button><button data-key-action="backspace">APAGAR</button></div>'+rows.map(function(row){ return '<div class="keyboard-row">'+row.split('').map(function(key){ return '<button data-key="'+key+'">'+key+'</button>'; }).join('')+'</div>'; }).join('')+'<div class="keyboard-row"><button class="space-key" data-key=" ">ESPAÇO</button><button class="search-key" data-key-action="submit">BUSCAR</button></div></div>';
+  }
+  function nextFilter(name) {
+    var options={platform:['Todas','Netflix','Prime Video','HBO Max','Disney+','Apple TV+','Globoplay'],genre:['Todos','Ação','Comédia','Drama','Crime','Animação','Família'],rating:['all','below_6','7_8','8_9','above_9'],type:['all','movie','tv','anime']}, values=options[name], current=searchState[name], index=values.indexOf(current); searchState[name]=values[(index+1)%values.length]; renderSearch();
+  }
+  function searchFiltersMarkup() { var ratingLabels={all:'Todas',below_6:'Abaixo de 6','7_8':'7 a 8','8_9':'8 a 9',above_9:'Acima de 9'}, typeLabels={all:'Todos',movie:'Filme',tv:'Série',anime:'Anime'}; return '<div class="search-filters"><button data-filter="platform"><small>Plataforma</small><b>'+escapeHtml(searchState.platform)+'⌄</b></button><button data-filter="genre"><small>Gênero</small><b>'+escapeHtml(searchState.genre)+'⌄</b></button><button data-filter="rating"><small>Nota</small><b>'+escapeHtml(ratingLabels[searchState.rating])+'⌄</b></button><button data-filter="type"><small>Tipo</small><b>'+escapeHtml(typeLabels[searchState.type])+'⌄</b></button></div>'; }
+  function renderSearch() {
+    clearInterval(heroTimer); activeStreamingHub=null;
+    var resultHtml=!searchState.submitted ? '<p class="search-empty">Digite um título, ajuste os filtros e pressione BUSCAR.</p>' : (searchState.loading ? '<div class="search-loading"><div class="loader"></div><span>Buscando no catálogo completo…</span></div>' : (searchState.results.length ? '<div class="search-results">'+searchState.results.map(mediaCard).join('')+'</div>' : '<p class="search-empty">Nenhum título encontrado.</p>'));
+    app.innerHTML='<section class="search-page">'+sidebarMarkup('search')+'<div class="search-layout"><aside class="search-controls">'+keyboardMarkup()+searchFiltersMarkup()+'</aside><main class="search-result-area">'+resultHtml+'</main></div></section>';
+    bindSidebar();
+    document.querySelectorAll('[data-key]').forEach(function(button){button.addEventListener('click',function(){searchState.query+=button.getAttribute('data-key');renderSearch();});});
+    document.querySelectorAll('[data-key-action]').forEach(function(button){button.addEventListener('click',function(){var action=button.getAttribute('data-key-action');if(action==='clear')searchState.query='';else if(action==='backspace')searchState.query=searchState.query.slice(0,-1);else submitSearch();renderSearch();});});
+    document.querySelectorAll('[data-filter]').forEach(function(button){button.addEventListener('click',function(){nextFilter(button.getAttribute('data-filter'));});});
+    document.querySelectorAll('.search-results .media-card').forEach(function(card){card.addEventListener('click',function(){detailsOrigin='search';renderMediaDetails(Number(card.getAttribute('data-media-id')),String(card.getAttribute('data-media-type')).toLowerCase()==='tv');});});
+  }
+  function submitSearch() {
+    var query=searchState.query.trim(); if(query.length<3 && searchState.platform==='Todas' && searchState.genre==='Todos' && searchState.rating==='all' && searchState.type==='all') { searchState.submitted=true; searchState.results=[]; return; }
+    searchState.submitted=true;searchState.loading=true;searchState.results=[];
+    var args='?rating='+encodeURIComponent(searchState.rating)+'&page=1'+(query.length>=3?'&query='+encodeURIComponent(query):'')+(searchState.platform!=='Todas'?'&provider='+encodeURIComponent(searchState.platform):'')+(searchState.genre!=='Todos'?'&genre='+encodeURIComponent(searchState.genre):'')+(searchState.type!=='all'?'&media_kind='+encodeURIComponent(searchState.type):'');
+    request('search_tmdb.php'+args,{method:'GET'},18000).then(function(result){searchState.results=(result.results || []).slice(0,30);searchState.loading=false;renderSearch();}).catch(function(){searchState.results=[];searchState.loading=false;renderSearch();});
   }
   document.addEventListener('keydown',function(event){
-    if(document.querySelector('.media-details') && (event.keyCode===10009 || event.keyCode===27)) { if(activeStreamingHub) renderStreaming(activeStreamingHub,false); else renderHome(); return; }
+    if(document.querySelector('.media-details') && (event.keyCode===10009 || event.keyCode===27)) { if(detailsOrigin==='search') renderSearch(); else if(activeStreamingHub) renderStreaming(activeStreamingHub,false); else renderHome(); return; }
     if(document.querySelector('.streaming-page') && event.keyCode===10009) { renderHome(); return; }
     if(!home || document.querySelector('.streaming-page')) return;
     var heroes=home.heroes || []; if(!heroes.length) return;
