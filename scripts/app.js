@@ -7,7 +7,7 @@
   var APP_VERSION = '0.1.0';
   var CATALOG_CACHE_TTL = 15 * 60 * 1000;
   var app = document.getElementById('app');
-  var home = null, heroIndex = 0, heroTimer = null, catalogCache = {}, mediaLandingCache = {}, ratingCache = {}, ratingPending = {}, detailsCache = {}, sportsCache = null, sportsDetailsCache = {}, sportsKeyHandler = null, activeStreamingHub = null, detailsOrigin = 'home', playerReturn = null, searchState = {query:'',platform:'Todas',genre:'Todos',rating:'all',type:'all',submitted:false,loading:false,results:[]};
+  var home = null, heroIndex = 0, heroTimer = null, catalogCache = {}, mediaLandingCache = {}, ratingCache = {}, ratingPending = {}, detailsCache = {}, vodSourcePrefetchCache = {}, sportsCache = null, sportsDetailsCache = {}, sportsKeyHandler = null, activeStreamingHub = null, detailsOrigin = 'home', playerReturn = null, searchState = {query:'',platform:'Todas',genre:'Todos',rating:'all',type:'all',submitted:false,loading:false,results:[]};
   var fallbackHero = { id:0, title:'BEM-VINDO AO MYTV', description:'Filmes, séries, esportes e TV ao vivo em um só lugar.', badge_text:'MYTV', rating_text:'LIVRE', backdrop_url:'assets/images/brand_background.png' };
   var hubs = [
     {id:'netflix',name:'Netflix',color:'#e50914',logo:'https://static.vecteezy.com/ti/vetor-gratis/p1/20190493-netflix-logotipo-netflix-icone-livre-gratis-vetor.jpg',intro:'assets/video/netflix.mp4'},
@@ -471,8 +471,13 @@
         (providers?'<h2>Disponível em</h2><div class="detail-providers">'+providers+'</div>':'')+
         ((item.similar_titles || []).length?'<h2>Títulos semelhantes</h2><div class="row detail-similar">'+item.similar_titles.map(mediaCard).join('')+'</div>':'')+
         '<h2>Informações</h2><div class="details-info">'+escapeHtml([genres,item.original_title && item.original_title!==title?'Título original: '+item.original_title:'',item.number_of_seasons?(item.number_of_seasons+' temporadas • '+(item.number_of_episodes || 0)+' episódios'):'',item.imdb_id?'IMDb: '+item.imdb_id:'','Metadados: TMDB • Disponibilidade: JustWatch (Brasil)'].filter(Boolean).join('\n'))+'</div></section></main></section>';
+      var firstEpisode=episodes[0] || null, resume=isResumable(progress);
+      var initialVodData={mediaId:mediaId,imdbId:item.imdb_id || '',title:title,isTv:isTv,season:resume ? Number(progress.seasonNumber || season) : (firstEpisode ? Number(firstEpisode.season_number || season) : Number(season)),episode:resume ? Number(progress.episodeNumber || 1) : (firstEpisode ? Number(firstEpisode.episode_number) : 1),episodes:episodes,backdrop:backdrop,poster:item.poster_thumb_url || item.poster_url || '',certification:item.certification || ''};
+      // Consulta fontes enquanto a pessoa lê os detalhes. Não inicia player
+      // nem baixa vídeo; apenas deixa a lista pronta para o botão Assistir.
+      prefetchVodSources(initialVodData);
       document.getElementById('details-back').addEventListener('click',function(){ if(detailsOrigin==='search') renderSearch(); else if(detailsOrigin==='movies' || detailsOrigin==='series') renderMediaLanding(detailsOrigin); else if(activeStreamingHub) renderStreaming(activeStreamingHub,false); else renderHome(); });
-      document.getElementById('detail-play').addEventListener('click',function(){ var first=episodes[0] || null, resume=isResumable(progress); openVod({mediaId:mediaId,imdbId:item.imdb_id || '',title:title,isTv:isTv,season:resume ? Number(progress.seasonNumber || season) : (first ? Number(first.season_number || season) : Number(season)),episode:resume ? Number(progress.episodeNumber || 1) : (first ? Number(first.episode_number) : 1),episodes:episodes,backdrop:backdrop,poster:item.poster_thumb_url || item.poster_url || '',certification:item.certification || ''}); });
+      document.getElementById('detail-play').addEventListener('click',function(){ openVod(initialVodData); });
       document.getElementById('detail-favorite').addEventListener('click',function(){ saveFavorite(item,isTv); renderMediaDetails(mediaId,isTv,season); });
       document.querySelectorAll('.season-tab').forEach(function(tab){ tab.addEventListener('click',function(){ renderMediaDetails(mediaId,isTv,Number(tab.getAttribute('data-season'))); }); });
       document.querySelectorAll('.episode-card').forEach(function(card){ card.addEventListener('click',function(){ openVod({mediaId:mediaId,imdbId:item.imdb_id || '',title:title,isTv:true,season:Number(card.getAttribute('data-season')),episode:Number(card.getAttribute('data-episode')),episodes:episodes,backdrop:backdrop,poster:item.poster_thumb_url || item.poster_url || '',certification:item.certification || ''}); }); });
@@ -531,13 +536,38 @@
       return frostVodSources(data).then(function(response){ return normalizeVodSources([response]); });
     });
   }
+  function vodSourceCacheKey(data) {
+    return [data.imdbId || '',data.isTv?'series':'movie',data.season || 1,data.episode || 1].join(':');
+  }
+  function prefetchVodSources(data) {
+    if(!data || !data.imdbId) return Promise.resolve([]);
+    var key=vodSourceCacheKey(data), cached=vodSourcePrefetchCache[key];
+    if(cached && cached.sources && Date.now()-cached.time<90000) return Promise.resolve(cached.sources);
+    if(cached && cached.pending) return cached.pending;
+    var pending=resolveVodSources(data).then(function(sources){
+      vodSourcePrefetchCache[key]={sources:sources,time:Date.now()};
+      console.log('[MYTV_TIZEN] fontes pré-carregadas:',sources.length,key);
+      return sources;
+    }).catch(function(error){ delete vodSourcePrefetchCache[key]; throw error; });
+    vodSourcePrefetchCache[key]={pending:pending,time:Date.now()};
+    return pending;
+  }
+  function playbackVodSources(data) {
+    var key=vodSourceCacheKey(data), cached=vodSourcePrefetchCache[key];
+    if(cached && cached.sources && Date.now()-cached.time<90000) {
+      delete vodSourcePrefetchCache[key];
+      console.log('[MYTV_TIZEN] usando fontes pré-carregadas:',key);
+      return Promise.resolve(cached.sources);
+    }
+    return prefetchVodSources(data);
+  }
   function formatTime(seconds) { seconds=Math.max(0,Math.floor(seconds || 0)); var h=Math.floor(seconds/3600), m=Math.floor(seconds%3600/60), s=seconds%60; return (h?h+':':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0'); }
   function vodAgeBanner(certification) { var info=ageRatingInfo(certification); if(!info) return ''; return '<div class="vod-age-banner" id="vod-age-banner">'+ageBadge(info)+'<div><b>'+escapeHtml(info.heading || 'Classificação indicativa')+'</b><small>'+escapeHtml(info.description)+'</small></div></div>'; }
   function openVod(data) {
     clearInterval(heroTimer); playerReturn={mediaId:data.mediaId,isTv:data.isTv,season:data.season};
     app.innerHTML='<section class="vod-player"><div class="vod-backdrop" style="background-image:url(\''+cleanUrl(data.backdrop)+'\')"></div><div class="vod-loading"><div class="loader"></div><b>Preparando reprodução...</b></div></section>';
     if(!data.imdbId) { renderVodError(data,'Não foi possível identificar este título para reprodução.'); return; }
-    resolveVodSources(data).then(function(sources){ if(!sources.length) throw new Error('Nenhuma fonte de reprodução está disponível agora.'); renderVodPlayer(data,sources); }).catch(function(error){ renderVodError(data,error.message || 'Não foi possível preparar o vídeo.'); });
+    playbackVodSources(data).then(function(sources){ if(!sources.length) throw new Error('Nenhuma fonte de reprodução está disponível agora.'); renderVodPlayer(data,sources); }).catch(function(error){ renderVodError(data,error.message || 'Não foi possível preparar o vídeo.'); });
   }
   function renderVodError(data,message) { app.innerHTML='<section class="vod-player vod-error"><div class="vod-error-card"><div class="vod-error-icon">!</div><strong>Não foi possível carregar a mídia</strong><span>'+escapeHtml(message)+'</span><button id="vod-back-error">VOLTAR</button></div></section>'; document.getElementById('vod-back-error').addEventListener('click',returnFromVod); }
   function returnFromVod() { var target=playerReturn; if(target) renderMediaDetails(target.mediaId,target.isTv,target.season); else renderHome(); }
