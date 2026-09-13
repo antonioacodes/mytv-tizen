@@ -61,7 +61,7 @@
     authenticate().then(function(auth){
       if (!auth || !auth.is_valid || !auth.usuario) throw new Error((auth && auth.message) || 'Não foi possível validar a conta.');
       localStorage.setItem('mytv_user',JSON.stringify(auth.usuario)); setSplash('Carregando filmes, séries e jogos...');
-      return request('home.php',{method:'GET'},30000);
+      return request('home.php?platform=tizen',{method:'GET'},30000);
     }).then(function(result){ home=result; renderHome(); }).catch(function(error){
       console.error('[MYTV_TIZEN] bootstrap error',error);
       setSplash('Não foi possível acessar o servidor. Verifique sua rede e tente novamente.',true);
@@ -85,7 +85,9 @@
     var copy='<div class="hero-copy">'+logo+(eyebrow ? '<div class="eyebrow">'+escapeHtml(eyebrow)+'</div>' : '')+'<h1>'+escapeHtml(hero.title || '')+'</h1>'+
       (heroInfo(hero) ? '<div class="hero-info">'+heroInfo(hero)+'</div>' : '')+'<p>'+escapeHtml(hero.description || '')+'</p>'+
       (total>1 ? '<div class="hero-pagination">'+position+' / '+total+'</div>' : '')+'</div>';
-    return isSports(hero) ? '<section class="hero hero-sports">'+copy+'<div class="teams">'+team(hero.home_logo_url,hero.home_team)+'<span class="versus">×</span>'+team(hero.away_logo_url,hero.away_team)+'</div></section>' : '<section class="hero">'+copy+'</section>';
+    var destination=String(hero.destination || '').trim();
+    var target=destination ? ' data-home-destination="'+escapeHtml(destination)+'" tabindex="0" role="button"' : '';
+    return isSports(hero) ? '<section class="hero hero-sports"'+target+'>'+copy+'<div class="teams">'+team(hero.home_logo_url,hero.home_team)+'<span class="versus">×</span>'+team(hero.away_logo_url,hero.away_team)+'</div></section>' : '<section class="hero"'+target+'>'+copy+'</section>';
   }
   function hubCard(hub) {
     return '<button class="hub-card" data-provider="'+hub.id+'"><img src="'+attrUrl(hub.logo)+'" alt="'+escapeHtml(hub.name)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'block\';"><span style="display:none">'+escapeHtml(hub.name)+'</span></button>';
@@ -103,7 +105,8 @@
     var entries=[{id:'search',label:'Buscar',icon:'search'},{id:'home',label:'Home',icon:'home'},{id:'favorites',label:'Favoritos',icon:'favorites'},{id:'sports',label:'Esportes',icon:'sports'},{id:'live',label:'TV ao Vivo',icon:'live'},{id:'movies',label:'Filmes',icon:'movies'},{id:'series',label:'Séries',icon:'series'},{id:'settings',label:'Configurações',icon:'settings'}];
     return '<aside class="sidebar" aria-label="Menu principal"><nav class="side-menu">'+entries.map(function(entry){ return '<button class="side-menu-item '+(active===entry.id ? 'is-active' : '')+'" data-nav="'+entry.id+'" aria-label="'+entry.label+'" title="'+entry.label+'">'+icon(entry.icon)+'</button>'; }).join('')+'</nav></aside>';
   }
-  function bindSidebar() { document.querySelectorAll('[data-nav]').forEach(function(button){ button.addEventListener('click',function(){ var page=button.getAttribute('data-nav'); stopActivePlayback(); if(page==='home') { renderHome(); return; } if(page==='search') { renderSearch(); return; } if(page==='favorites') { renderFavorites(); return; } if(page==='sports') { renderSports(); return; } if(page==='live') { renderLiveTv(); return; } if(page==='movies' || page==='series') { renderMediaLanding(page); return; } if(page==='settings') { renderSettings(); return; } renderPlaceholder(page); }); }); }
+  function bindSidebar() { document.querySelectorAll('[data-nav]').forEach(function(button){ button.addEventListener('click',function(){ navigateHomeDestination(button.getAttribute('data-nav')); }); }); }
+  function navigateHomeDestination(destination) { var page=String(destination || '').trim().toUpperCase(); stopActivePlayback(); if(page==='HOME') { renderHome(); return; } if(page==='SEARCH') { renderSearch(); return; } if(page==='FAVORITES') { renderFavorites(); return; } if(page==='SPORTS') { renderSports(); return; } if(page==='LIVE' || page==='LIVE_TV') { renderLiveTv(); return; } if(page==='MOVIES' || page==='SERIES' || page==='KIDS') { renderMediaLanding(page.toLowerCase()); return; } if(page==='RECHARGE') { renderRecharge(); return; } if(page==='SETTINGS') { renderSettings(); return; } renderPlaceholder(page.toLowerCase()); }
   function renderPlaceholder(page) {
     clearInterval(heroTimer);
     var labels={search:'Buscar',favorites:'Favoritos',sports:'Esportes',live:'TV ao Vivo',movies:'Filmes',series:'Séries',settings:'Configurações'};
@@ -234,6 +237,17 @@
     var entries=[['Recarga & Planos','Renove ou estenda seu período de acesso','Ativo'],['Vincular E-mail',user.email || 'Nenhum e-mail vinculado',''],['Vincular Telefone',user.telefone || 'Adicione um número para recuperação',''],['Criar / Mudar Senha','Para acessar sua conta em outros dispositivos',''],['Notificações de eventos esportivos','Desativadas: avisos aparecem somente dentro do app','Desativadas'],['Suporte & Ajuda','Leia o QR code com o celular para receber ajuda',''],['Reportar problemas & feedback','Leia o QR code com o celular para enviar sugestões ou reportar falhas',''],['Mudar de Conta','Entre com o ID e a senha de outra conta','']];
     app.innerHTML='<section class="settings-page">'+sidebarMarkup('settings')+'<main class="settings-content"><h1>Configurações</h1><section class="account-card"><div><small>APARELHO</small><b>'+escapeHtml(device)+'</b><span>Versão '+APP_VERSION+' • Build 1</span></div><div><small>CONTA</small><b>'+escapeHtml(user.nome || user.id || 'Minha conta')+'</b><span>'+escapeHtml(expiry)+'</span></div></section><h2>Gerenciar Conta</h2><div class="settings-list">'+entries.map(function(entry,index){return '<button class="setting-item '+(index===7?'danger':'')+'"><div><b>'+escapeHtml(entry[0])+'</b><span>'+escapeHtml(entry[1])+'</span></div>'+(entry[2]?'<em>'+escapeHtml(entry[2])+'</em>':'<i>›</i>')+'</button>';}).join('')+'</div></main></section>';
     bindSidebar();
+    var recharge=document.querySelector('.setting-item');
+    if(recharge) recharge.addEventListener('click',renderRecharge);
+  }
+  function renderRecharge() {
+    clearInterval(heroTimer); activeStreamingHub=null;
+    var user={}; try{user=JSON.parse(localStorage.getItem('mytv_user') || '{}');}catch(error){}
+    var checkout='https://acodes.pro/mytv_backend/recharge/checkout.php?id_app='+encodeURIComponent(user.id_app || user.id || deviceId());
+    var qr='https://api.qrserver.com/v1/create-qr-code/?size=320x320&data='+encodeURIComponent(checkout);
+    app.innerHTML='<section class="settings-page recharge-page">'+sidebarMarkup('settings')+'<main class="settings-content"><h1>Recarga & Planos</h1><section class="account-card recharge-card"><div><small>RENOVE SEU ACESSO</small><b>Leia o QR Code com o celular</b><span>Escolha seu plano e conclua a recarga com segurança.</span></div><img src="'+attrUrl(qr)+'" alt="QR Code para recarga"></section><button class="setting-item" id="recharge-back"><div><b>Voltar para configurações</b><span>Gerencie sua conta e preferências</span></div><i>›</i></button></main></section>';
+    bindSidebar();
+    document.getElementById('recharge-back').addEventListener('click',renderSettings);
   }
   function progressItemCard(item,progress,history) {
     var media={id:item.mediaId,media_type:item.isTvShow?'tv':'movie',title:item.title,name:item.title,poster_thumb_url:item.poster_url,poster_url:item.poster_url}, ratio=Math.max(0,Math.min(1,Number(progress.positionMs)/Math.max(1,Number(progress.durationMs)))), remaining=Math.max(0,Math.ceil((progress.durationMs-progress.positionMs)/60000));
@@ -257,7 +271,7 @@
   function featureCard(card) {
     var color=/^#[0-9a-f]{6}$/i.test(card.background_color || '') ? card.background_color : '#25272c';
     var image=card.image_url ? 'background-image:url(\''+cleanUrl(card.image_url)+'\');' : '';
-    return '<button class="feature-card" style="background-color:'+color+';'+image+'"><strong>'+escapeHtml(card.title || '')+'</strong><small>'+escapeHtml(card.subtitle || '')+'</small></button>';
+    return '<button class="feature-card" data-home-destination="'+escapeHtml(card.destination || 'HOME')+'" style="background-color:'+color+';'+image+'"><strong>'+escapeHtml(card.title || '')+'</strong><small>'+escapeHtml(card.subtitle || '')+'</small></button>';
   }
   function renderHome() {
     var settings=(home && home.settings) || {}, heroes=settings.hero_enabled===false ? [] : ((home && home.heroes) || []);
@@ -270,6 +284,7 @@
       (cards.length ? '<section class="section"><h2 class="section-title">'+escapeHtml(settings.features_title || 'Aproveite ao máximo o App')+'</h2><div class="row">'+cards.map(featureCard).join('')+'</div></section>' : '')+'</div></section>';
     bindSidebar();
     document.querySelectorAll('[data-provider]').forEach(function(button){ button.addEventListener('click',function(){ openStreaming(findHub(button.getAttribute('data-provider'))); }); });
+    document.querySelectorAll('[data-home-destination]').forEach(function(element){ element.addEventListener('click',function(){ navigateHomeDestination(element.getAttribute('data-home-destination')); }); });
     clearInterval(heroTimer);
     if (visible.length>1) heroTimer=setInterval(function(){ heroIndex=(heroIndex+1)%visible.length; renderHome(); },Math.max(3,Math.min(60,Number(settings.hero_interval_seconds) || 8))*1000);
   }
@@ -305,7 +320,10 @@
   /* Filmes e Séries usam o mesmo payload pré-gerado que abastece o Android.
      Assim títulos, ordem editorial e artes não divergem entre as duas TVs. */
   function mediaLandingDefinition(kind) {
-    return kind==='series' ? {
+    return kind==='kids' ? {
+      title:'Infantil', action:'ASSISTIR AGORA', type:'movie', hero:'destaques',
+      rows:[['Animações Populares','animacoes'],['Para Toda a Família','familia'],['Desenhos de TV','tv']]
+    } : kind==='series' ? {
       title:'Séries', action:'ASSISTIR SÉRIE', type:'tv',
       hero:'destaques',
       rows:[['Séries Populares','populares'],['Ação e Aventura','acao_aventura'],['Séries de Drama','drama'],['Ficção Científica e Fantasia','sci_fi']]
@@ -325,7 +343,7 @@
     if(cached && Date.now()-cached.time<CATALOG_CACHE_TTL) return Promise.resolve(cached.data);
     var definition=mediaLandingDefinition(kind);
     return request('get_tmdb.php',{method:'GET'},20000).then(function(payload){
-      var section=(payload && payload[kind==='series'?'series':'movies']) || {};
+      var section=(payload && payload[kind==='series'?'series':kind==='kids'?'kids':'movies']) || {};
       var heroes=(section[definition.hero] || []).map(function(item){ return landingItem(item,definition.type); });
       var rows=definition.rows.map(function(row){ return {title:row[0],items:(section[row[1]] || []).map(function(item){ return landingItem(item,definition.type); })}; }).filter(function(row){ return row.items.length; });
       if(!heroes.length && !rows.length) throw new Error('Catálogo indisponível');
